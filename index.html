@@ -214,7 +214,7 @@
           (<code>S</code> o <code>T</code>) para que la ESP32 genere la señal de forma autónoma;
           la curva que se grafica aquí para esos modos es una simulación local (amplitud 90°,
           periodo 10 s) para visualizar la forma esperada, y no depende de los datos que llegan
-          de la ESP. El modo <strong>Libre</strong> sigue enviando la referencia como texto plano
+          de la ESP. El modo <strong>Escalón</strong> sigue enviando la referencia como texto plano
           con dos decimales (p. ej. <code>-12.50</code>).
         </p>
         <p class="note">
@@ -233,12 +233,11 @@
         <div class="mode-switch">
           <button class="mode-btn active" data-mode="seno">Seno</button>
           <button class="mode-btn" data-mode="triangular">Triangular</button>
-          <button class="mode-btn" data-mode="libre">Libre</button>
+          <button class="mode-btn" data-mode="escalon">Escalón</button>
         </div>
 
         <div id="autoParams" class="params">
           <p class="hint" style="margin-top:0;">
-          
           </p>
           <button id="toggleRun" class="btn btn-primary full">Iniciar</button>
         </div>
@@ -396,14 +395,14 @@
       const fase = 2 * Math.PI * tSec / FIXED_PERIOD;
       return (2 * FIXED_AMP / Math.PI) * Math.asin(Math.sin(fase));
     }
-    return currentRef; // modo libre: el valor lo fija el usuario, no se simula
+    return currentRef; // modo escalón: el valor lo fija el usuario, no se simula
   }
 
   function updateRefReadout(){
     $('refValue').innerHTML = currentRef.toFixed(2) + '<small>°</small>';
-    const modeLabel = { seno:'Modo seno', triangular:'Modo triangular', libre:'Modo libre' }[mode];
+    const modeLabel = { seno:'Modo seno', triangular:'Modo triangular', escalon:'Modo escalón' }[mode];
     let suffix = '';
-    if(mode !== 'libre'){
+    if(mode !== 'escalon'){
       suffix = running ? ' · enviado a la ESP (visualización local)' : ' · detenido';
     }
     $('refMeta').textContent = modeLabel + suffix;
@@ -434,9 +433,9 @@
       if(newMode === mode) return;
       document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
-      if(mode !== 'libre') stopGenerator();
+      if(mode !== 'escalon') stopGenerator();
       mode = newMode;
-      if(mode === 'libre'){
+      if(mode === 'escalon'){
         $('autoParams').classList.add('hidden');
         $('freeParams').classList.remove('hidden');
         currentRef = clamp(parseFloat($('freeSlider').value) || 0, -90, 90);
@@ -570,7 +569,6 @@
       }
       $('connectBtn').disabled = true; $('disconnectBtn').disabled = false;
       $('connPanel').open = false;
-      startPlotLoop();
     });
     client.on('reconnect', ()=>{ setStatus('connecting'); log('Reconectando…', 'warn'); });
     client.on('error', (err)=>{ log('Error MQTT: ' + err.message, 'error'); setStatus('error'); });
@@ -578,7 +576,6 @@
       if(connected) log('Conexión cerrada', 'warn');
       connected = false; setStatus('idle');
       $('connectBtn').disabled = false; $('disconnectBtn').disabled = true;
-      stopPlotLoop();
     });
     client.on('message', (topic, payload)=> handleMessage(topic, payload.toString()));
   });
@@ -586,13 +583,15 @@
   $('disconnectBtn').addEventListener('click', ()=>{
     if(client) client.end(true);
     stopGenerator();
-    stopPlotLoop();
     connected = false; setStatus('idle');
     $('connectBtn').disabled = false; $('disconnectBtn').disabled = true;
     log('Desconectado manualmente', 'warn');
   });
 
   // ---------- init ----------
+  // La gráfica corre siempre, sin importar si hay conexión MQTT o datos de la ESP:
+  // así el seno/triangular se sigue dibujando aunque no llegue telemetría.
+  startPlotLoop();
   updateRefReadout();
   log('Panel listo. Configura el broker MQTT y presiona Conectar.');
 })();
