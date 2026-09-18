@@ -231,9 +231,9 @@
       <section class="panel">
         <h2>Señal de referencia</h2>
         <div class="mode-switch">
-          <button class="mode-btn active" data-mode="Seno">Seno</button>
-          <button class="mode-btn" data-mode="Triangular">Triangular</button>
-          <button class="mode-btn" data-mode="Escalon">Libre</button>
+          <button class="mode-btn active" data-mode="seno">Seno</button>
+          <button class="mode-btn" data-mode="triangular">Triangular</button>
+          <button class="mode-btn" data-mode="libre">Libre</button>
         </div>
 
         <div id="autoParams" class="params">
@@ -284,7 +284,7 @@
       <div class="chart-head">
         <h2>Respuesta en tiempo real</h2>
         <div class="legend">
-          <span><i style="background:var(--amber)"></i>Referencia </span>
+          <span><i style="background:var(--amber)"></i>Referencia (simulada en Seno/Triangular)</span>
           <span><i style="background:var(--green)"></i>Eje interno (péndulo)</span>
           <span><i style="background:var(--blue)"></i>Eje externo (motor)</span>
         </div>
@@ -405,7 +405,7 @@
 
   function updateRefReadout(){
     $('refValue').innerHTML = currentRef.toFixed(2) + '<small>°</small>';
-    const modeLabel = { seno:'Modo Seno', triangular:'Modo Triangular', libre:'Modo Escalon' }[mode];
+    const modeLabel = { seno:'Modo seno', triangular:'Modo triangular', libre:'Modo libre' }[mode];
     let suffix = '';
     if(mode !== 'libre'){
       suffix = running ? ' · enviado a la ESP (visualización local)' : ' · detenido';
