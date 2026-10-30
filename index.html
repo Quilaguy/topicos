@@ -20,6 +20,7 @@
     --amber:#f5a623;
     --green:#34d399;
     --blue:#4ea8ff;
+    --violet:#c084fc;
     --red:#ff5d5d;
     --ok:#34d399;
   }
@@ -85,6 +86,7 @@
   .conn-grid{
     display:grid;grid-template-columns:repeat(2,1fr);gap:14px 18px;
   }
+  @media (max-width:620px){.conn-grid{grid-template-columns:1fr;}}
   .conn-grid label{display:flex;flex-direction:column;gap:6px;font-size:0.78rem;color:var(--text-dim);font-weight:500;}
   .conn-grid label.opt{opacity:0.85;}
   input[type=text],input[type=password],input[type=number],.conn-grid input{
@@ -125,9 +127,10 @@
   input[type=range]{flex:1;accent-color:var(--amber);height:4px;}
   .slider-row input[type=number]{width:74px;flex:none;}
   .hint{font-size:0.74rem;color:var(--text-dim);line-height:1.5;margin:10px 0 0;}
+  .hint code{background:var(--panel-2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-family:'JetBrains Mono',monospace;}
 
   /* ---------- readout cards ---------- */
-  .readouts{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px;}
+  .readouts{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:20px;}
   @media (max-width:620px){.readouts{grid-template-columns:1fr;}}
   .card{
     background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);
@@ -138,17 +141,25 @@
     font-variant-numeric:tabular-nums;line-height:1.15;}
   .card-value small{font-size:1.1rem;font-weight:500;margin-left:2px;opacity:0.75;}
   .card-meta{font-size:0.72rem;color:var(--text-dim);margin-top:2px;}
+  .bar{height:6px;border-radius:3px;background:var(--panel-2);border:1px solid var(--border);position:relative;margin-top:8px;overflow:hidden;}
+  .bar::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border);}
+  .bar-fill{position:absolute;top:0;bottom:0;background:var(--violet);left:50%;width:0;}
 
   /* ---------- chart ---------- */
   .chart-panel{padding-bottom:14px;}
   .chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
   .chart-head h2{margin:0;}
-  .legend{display:flex;gap:16px;}
-  .legend span{display:flex;align-items:center;gap:6px;font-size:0.76rem;color:var(--text-dim);}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;}
+  .legend label{display:flex;align-items:center;gap:6px;font-size:0.76rem;color:var(--text-dim);cursor:pointer;user-select:none;}
+  .legend input{display:none;}
   .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+  .legend input:not(:checked) + i{opacity:0.25;}
+  .legend input:not(:checked) ~ span{text-decoration:line-through;opacity:0.6;}
   .chart-wrap{position:relative;width:100%;height:340px;}
+  .chart-wrap.small{height:200px;margin-top:18px;}
   .chart-wrap canvas{max-width:100%;}
-  @media (max-width:620px){.chart-wrap{height:260px;}}
+  .chart-sub{font-size:0.8rem;color:var(--text-dim);font-weight:600;margin:18px 0 6px;}
+  @media (max-width:620px){.chart-wrap{height:260px;}.chart-wrap.small{height:170px;}}
 
   /* ---------- log ---------- */
   .log{margin-top:16px;max-height:180px;overflow-y:auto;display:flex;flex-direction:column-reverse;gap:4px;
@@ -218,10 +229,10 @@
           con dos decimales (p. ej. <code>-12.50</code>).
         </p>
         <p class="note">
-          La telemetría acepta el formato CSV del firmware, <code>contador, péndulo, motor</code>
-          (p. ej. <code>94069, -0.632, -2.581</code>), el formato de texto
-          <code>Eje interno (AS5600): 3.50 | Eje externo (encoder): -15.33</code>, o JSON con claves
-          <code>interno</code>/<code>externo</code>.
+          La telemetría acepta el CSV del firmware <code>t_ms, péndulo, motor, Uk</code>
+          (p. ej. <code>94069,-0.632,-2.581,72.40</code>), el formato anterior sin <code>Uk</code>,
+          texto <code>Eje interno: 3.50 | Eje externo: -15.33 | Control: 70.0</code>, o JSON con claves
+          <code>interno</code>/<code>externo</code>/<code>control</code>.
         </p>
       </div>
     </details>
@@ -238,6 +249,7 @@
 
         <div id="autoParams" class="params">
           <p class="hint" style="margin-top:0;">
+            Al iniciar se envía <code id="cmdPreview">S</code> a la ESP32 una sola vez.
           </p>
           <button id="toggleRun" class="btn btn-primary full">Iniciar</button>
         </div>
@@ -261,6 +273,12 @@
           <span class="card-value" id="refValue">0.00<small>°</small></span>
           <span class="card-meta" id="refMeta">Modo seno · detenido</span>
         </div>
+        <div class="card" style="--accent:var(--violet)">
+          <span class="card-label">Señal de control · Uk</span>
+          <span class="card-value" id="controlValue">—<small>%</small></span>
+          <div class="bar"><div class="bar-fill" id="controlBar"></div></div>
+          <span class="card-meta" id="controlMeta">Esperando datos…</span>
+        </div>
         <div class="card" style="--accent:var(--green)">
           <span class="card-label">Eje interno · AS5600 (péndulo)</span>
           <span class="card-value" id="internoValue">—<small>°</small></span>
@@ -279,13 +297,18 @@
       <div class="chart-head">
         <h2>Respuesta en tiempo real</h2>
         <div class="legend">
-          <span><i style="background:var(--amber)"></i>Referencia (simulada en Seno/Triangular)</span>
-          <span><i style="background:var(--green)"></i>Eje interno (péndulo)</span>
-          <span><i style="background:var(--blue)"></i>Eje externo (motor)</span>
+          <label><input type="checkbox" data-ds="0" checked><i style="background:var(--amber)"></i><span>Referencia (simulada en Seno/Triangular)</span></label>
+          <label><input type="checkbox" data-ds="1" checked><i style="background:var(--green)"></i><span>Eje interno (péndulo)</span></label>
+          <label><input type="checkbox" data-ds="2" checked><i style="background:var(--blue)"></i><span>Eje externo (motor)</span></label>
         </div>
       </div>
       <div class="chart-wrap">
         <canvas id="chart"></canvas>
+      </div>
+
+      <div class="chart-sub">Señal de control Uk (% de duty, con signo)</div>
+      <div class="chart-wrap small">
+        <canvas id="chartControl"></canvas>
       </div>
     </section>
 
@@ -323,21 +346,22 @@
   // ---------- state ----------
   let client = null, connected = false;
   let mode = 'seno', running = false, startTime = null, genInterval = null;
-  let currentRef = 0, currentInterno = null, currentExterno = null;
-  let lastInternoTime = null, lastExternoTime = null;
+  let currentRef = 0, currentInterno = null, currentExterno = null, currentControl = null;
+  let lastInternoTime = null, lastExternoTime = null, lastControlTime = null;
   let plotInterval = null, plotStartTime = null;
 
   // Parámetros de la señal generada en la ESP32 (fijos en el firmware): amplitud 90°, periodo 10 s.
-  // Aquí solo se usan para dibujar localmente la forma esperada; no se envían por MQTT.
   const FIXED_AMP = 90;
   const FIXED_PERIOD = 10;
   const VIS_REFRESH_MS = 150;
+  const MAX_POINTS = 250;
 
   $('clientId').value = 'grua_' + Math.random().toString(16).slice(2, 8);
 
-  // ---------- chart ----------
-  const ctx = $('chart').getContext('2d');
-  const chart = new Chart(ctx, {
+  // ---------- charts ----------
+  const axisStyle = { ticks:{ color:'#8b98a4' }, grid:{ color:'#2a333c' } };
+
+  const chart = new Chart($('chart').getContext('2d'), {
     type: 'line',
     data: {
       labels: [],
@@ -351,17 +375,47 @@
       animation:false, responsive:true, maintainAspectRatio:false,
       interaction:{ mode:'nearest', intersect:false },
       scales: {
-        x:{ ticks:{ color:'#8b98a4', maxTicksLimit:8 }, grid:{ color:'#2a333c' }, title:{ display:true, text:'tiempo (s)', color:'#8b98a4' } },
-        y:{ ticks:{ color:'#8b98a4' }, grid:{ color:'#2a333c' }, title:{ display:true, text:'Grados', color:'#8b98a4' } }
+        x:{ ...axisStyle, ticks:{ color:'#8b98a4', maxTicksLimit:8 }, title:{ display:true, text:'tiempo (s)', color:'#8b98a4' } },
+        y:{ ...axisStyle, title:{ display:true, text:'Grados', color:'#8b98a4' } }
       },
       plugins:{ legend:{ display:false } }
     }
   });
 
+  const chartControl = new Chart($('chartControl').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label:'Uk', data:[], borderColor:'#c084fc', backgroundColor:'rgba(192,132,252,0.12)',
+          borderWidth:2, pointRadius:0, tension:0, stepped:true, spanGaps:true, fill:'origin' }
+      ]
+    },
+    options: {
+      animation:false, responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'nearest', intersect:false },
+      scales: {
+        x:{ ...axisStyle, ticks:{ color:'#8b98a4', maxTicksLimit:8 }, title:{ display:true, text:'tiempo (s)', color:'#8b98a4' } },
+        y:{ ...axisStyle, min:-105, max:105, ticks:{ color:'#8b98a4', stepSize:50 }, title:{ display:true, text:'Uk (%)', color:'#8b98a4' } }
+      },
+      plugins:{ legend:{ display:false } }
+    }
+  });
+
+  // Mostrar / ocultar curvas desde la leyenda
+  document.querySelectorAll('.legend input').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      chart.setDatasetVisibility(+cb.dataset.ds, cb.checked);
+      chart.update('none');
+    });
+  });
+
   function resetChart(){
-    chart.data.labels = [];
-    chart.data.datasets.forEach(d => d.data = []);
-    chart.update();
+    [chart, chartControl].forEach(c=>{
+      c.data.labels = [];
+      c.data.datasets.forEach(d => d.data = []);
+      c.update();
+    });
     plotStartTime = Date.now();
   }
 
@@ -369,33 +423,35 @@
     resetChart();
     plotInterval = setInterval(()=>{
       const tSec = ((Date.now() - plotStartTime) / 1000).toFixed(1);
+
       chart.data.labels.push(tSec);
       chart.data.datasets[0].data.push(currentRef);
       chart.data.datasets[1].data.push(currentInterno);
       chart.data.datasets[2].data.push(currentExterno);
-      const maxPoints = 250;
-      if(chart.data.labels.length > maxPoints){
-        chart.data.labels.shift();
-        chart.data.datasets.forEach(d => d.data.shift());
-      }
-      chart.update('none');
+
+      chartControl.data.labels.push(tSec);
+      chartControl.data.datasets[0].data.push(currentControl);
+
+      [chart, chartControl].forEach(c=>{
+        if(c.data.labels.length > MAX_POINTS){
+          c.data.labels.shift();
+          c.data.datasets.forEach(d => d.data.shift());
+        }
+        c.update('none');
+      });
     }, 200);
   }
-  function stopPlotLoop(){ clearInterval(plotInterval); plotInterval = null; }
 
   // ---------- local visualization of the reference (Seno / Triangular) ----------
-  // Esto SOLO dibuja localmente la forma de onda esperada; no depende de la telemetría
-  // de la ESP y no cambia el mensaje que se envía (un solo caracter 'S' o 'T').
   function computeReference(tSec){
     if(mode === 'seno'){
       return FIXED_AMP * Math.sin(2 * Math.PI * tSec / FIXED_PERIOD);
     }
     if(mode === 'triangular'){
-      // Triangular en fase con el seno (empieza en 0 y sube primero), igual que en el firmware.
       const fase = 2 * Math.PI * tSec / FIXED_PERIOD;
       return (2 * FIXED_AMP / Math.PI) * Math.asin(Math.sin(fase));
     }
-    return currentRef; // modo escalón: el valor lo fija el usuario, no se simula
+    return currentRef;
   }
 
   function updateRefReadout(){
@@ -411,7 +467,6 @@
   function startGenerator(){
     running = true; startTime = Date.now();
     $('toggleRun').textContent = 'Detener';
-    // Un solo mensaje: 'S' o 'T'. La ESP32 se encarga de generar la señal de ahí en adelante.
     const cmd = mode === 'seno' ? 'S' : 'T';
     publish($('pubTopic').value.trim(), cmd);
     genInterval = setInterval(()=>{
@@ -473,60 +528,75 @@
 
   // ---------- telemetry parsing ----------
   function updateReadouts(){
-    const iv = $('internoValue'), im = $('internoMeta');
     if(currentInterno !== null){
-      iv.innerHTML = currentInterno.toFixed(2) + '<small>°</small>';
-      im.textContent = 'Actualizado ' + new Date(lastInternoTime).toLocaleTimeString();
+      $('internoValue').innerHTML = currentInterno.toFixed(2) + '<small>°</small>';
+      $('internoMeta').textContent = 'Actualizado ' + new Date(lastInternoTime).toLocaleTimeString();
     }
-    const ev = $('externoValue'), em = $('externoMeta');
     if(currentExterno !== null){
-      ev.innerHTML = currentExterno.toFixed(2) + '<small>°</small>';
-      em.textContent = 'Actualizado ' + new Date(lastExternoTime).toLocaleTimeString();
+      $('externoValue').innerHTML = currentExterno.toFixed(2) + '<small>°</small>';
+      $('externoMeta').textContent = 'Actualizado ' + new Date(lastExternoTime).toLocaleTimeString();
+    }
+    if(currentControl !== null){
+      $('controlValue').innerHTML = currentControl.toFixed(1) + '<small>%</small>';
+      $('controlMeta').textContent = 'Actualizado ' + new Date(lastControlTime).toLocaleTimeString();
+      // Barra centrada en 0: hacia la derecha positivo, hacia la izquierda negativo
+      const pct = clamp(currentControl, -100, 100) / 2;  // mitad del ancho = 100 %
+      const bar = $('controlBar');
+      bar.style.width = Math.abs(pct) + '%';
+      bar.style.left  = pct >= 0 ? '50%' : (50 + pct) + '%';
     }
   }
 
-  // Interpreta el payload en varios formatos posibles y devuelve {interno, externo} (péndulo / motor).
+  // Devuelve {interno, externo, control}
   function parsePayload(str){
     const s = str.trim();
+    const num = (re) => { const m = s.match(re); return m ? parseFloat(m[1]) : null; };
 
-    // 1) Texto etiquetado: "Eje interno (AS5600): 3.50 | Eje externo (encoder): -15.33"
-    const mi = s.match(/interno[^0-9\-]*(-?\d+(?:\.\d+)?)/i);
-    const me = s.match(/externo[^0-9\-]*(-?\d+(?:\.\d+)?)/i);
-    if(mi || me){
+    // 1) Texto etiquetado
+    if(/interno|externo|control/i.test(s) && !s.startsWith('{')){
       return {
-        interno: mi ? parseFloat(mi[1]) : null,
-        externo: me ? parseFloat(me[1]) : null
+        interno: num(/interno[^0-9\-]*(-?\d+(?:\.\d+)?)/i),
+        externo: num(/externo[^0-9\-]*(-?\d+(?:\.\d+)?)/i),
+        control: num(/(?:control|uk)[^0-9\-]*(-?\d+(?:\.\d+)?)/i)
       };
     }
 
-    // 2) JSON: {"interno":..,"externo":..} o variantes (pendulo/motor, eje_interno/eje_externo, as5600/encoder)
+    // 2) JSON
     if(s.startsWith('{')){
       try{
         const obj = JSON.parse(s);
         const gi = obj.interno ?? obj.eje_interno ?? obj.pendulo ?? obj.as5600 ?? null;
         const ge = obj.externo ?? obj.eje_externo ?? obj.motor ?? obj.encoder ?? null;
+        const gc = obj.control ?? obj.uk ?? obj.Uk ?? obj.u ?? null;
         return {
           interno: gi != null ? parseFloat(gi) : null,
-          externo: ge != null ? parseFloat(ge) : null
+          externo: ge != null ? parseFloat(ge) : null,
+          control: gc != null ? parseFloat(gc) : null
         };
-      }catch(e){ /* no es JSON válido, se sigue intentando */ }
+      }catch(e){ /* sigue */ }
     }
 
-    // 3) CSV del firmware: "contador, péndulo, motor" (p. ej. "94069, -0.632, -2.581")
-    //    o simplemente "péndulo, motor" si no viene contador.
-    const nums = (s.match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
-    if(nums.length >= 3) return { interno: nums[nums.length - 2], externo: nums[nums.length - 1] };
-    if(nums.length === 2) return { interno: nums[0], externo: nums[1] };
+    // 3) CSV del firmware
+    //    4 campos: t_ms, péndulo, motor, Uk   (formato actual)
+    //    3 campos: t_ms, péndulo, motor       (formato anterior)
+    //    2 campos: péndulo, motor
+    const nums = (s.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/gi) || []).map(Number);
+    if(nums.length >= 4) return { interno: nums[1], externo: nums[2], control: nums[3] };
+    if(nums.length === 3) return { interno: nums[1], externo: nums[2], control: null };
+    if(nums.length === 2) return { interno: nums[0], externo: nums[1], control: null };
 
-    return { interno: null, externo: null };
+    return { interno: null, externo: null, control: null };
   }
+
+  const isNum = (v) => v !== null && v !== undefined && !Number.isNaN(v);
 
   function handleMessage(topic, payloadStr){
     log('« ' + topic + ': ' + payloadStr);
-    const { interno, externo } = parsePayload(payloadStr);
+    const { interno, externo, control } = parsePayload(payloadStr);
     const now = Date.now();
-    if(interno !== null && !Number.isNaN(interno)){ currentInterno = interno; lastInternoTime = now; }
-    if(externo !== null && !Number.isNaN(externo)){ currentExterno = externo; lastExternoTime = now; }
+    if(isNum(interno)){ currentInterno = interno; lastInternoTime = now; }
+    if(isNum(externo)){ currentExterno = externo; lastExternoTime = now; }
+    if(isNum(control)){ currentControl = control; lastControlTime = now; }
     updateReadouts();
   }
 
@@ -589,8 +659,6 @@
   });
 
   // ---------- init ----------
-  // La gráfica corre siempre, sin importar si hay conexión MQTT o datos de la ESP:
-  // así el seno/triangular se sigue dibujando aunque no llegue telemetría.
   startPlotLoop();
   updateRefReadout();
   log('Panel listo. Configura el broker MQTT y presiona Conectar.');
